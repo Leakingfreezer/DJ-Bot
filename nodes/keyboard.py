@@ -1,6 +1,11 @@
 import pygame 
 import time 
 
+"""
+Purpose: 
+Args:
+Return:
+"""
 class KeyboardNode: 
     def __init__(self):
         self.key_map = {
@@ -35,4 +40,11 @@ class KeyboardNode:
                             "intensity": self.classify_intensity(press_duration),
                         }
             return None
+        
+        def classify_intensity(self, duration):
+            if duration < 0.15:
+                return "light"
+            if duration < 0.4:
+                return "medium"
+            return "strong"
 
