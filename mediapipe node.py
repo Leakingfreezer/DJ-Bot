@@ -11,6 +11,7 @@ Show does it work: Opens up the mediapipe and reads the frame, will convert the 
 then process the frame for hand detection and tracking. The frame converts back to RGB to BGR for OpenCV.
 If hands are detected, will see if it matches or touches the "virtual screen" dj deck interface for logic interactions.
 If the user presses the key 'q', this program will close
+Returns: Raw data to the gesture classifier to idenitify what type of function to then execuate
 """
 
 #Opening the camera
@@ -34,6 +35,9 @@ with mp_hands.Hands(
         rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
         results = hands.process(rgb)
 
+        #Drawing a circle
+        h, w, _ = frame.shape
+
         if results.multi_hand_landmarks:
             for hand_landmarks in results.multi_hand_landmarks:
                 drawing.draw_landmarks(
@@ -44,8 +48,16 @@ with mp_hands.Hands(
                     drawing_styles.get_default_hand_connections_style()
                 )
 
-        cv.imshow("Hand Tracking", frame)
+                #Detecting the pointer finger landmark and annotating it with a circle
+                index_tip = hand_landmarks.landmark[8]
+                x = int(index_tip.x * w)
+                y = int(index_tip.y * h)
 
+                cv.circle(frame, (x, y), 10, (0, 255, 0), -1)
+                cv.putText(frame, f"Index: ({x}, {y})", (10, 40),
+                cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+       
+        cv.imshow("Gesture Tracking", frame)
         #Press the "q" key to escape
         if cv.waitKey(1) & 0xFF == ord("q"):
             break
