@@ -26,4 +26,4 @@ I wanted a modular design, ROS2 based workflows work for bots so that many diffe
 ## How to Setup 
 
 ## Reflection/learning outcomes 
-
+- Implementing C++ was a design-decision choice to allow efficient decision making when it came to add more gestures. Since this is modular design, this makes it way faster when upgrading and doing further improvements/features
