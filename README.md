@@ -3,10 +3,25 @@
 
 ## Demo Video
 
-## Referenced Resources 
-- https://blog.roboflow.com/what-is-mediapipe/ -> used to understand the mediapipe library
-- https://medium.com/analytics-vidhya/mediapipe-hand-gesture-based-volume-controller-in-python-w-o-gpu-67db1f30c6ed -> volume controlling inspo
-- https://chernando.com/blog/2023/07/23/hand-tracking-for-mouse-input.html -> hand-tracking for mouse input inpso/understanding
+## Design Link
+https://www.figma.com/design/7r47bGQlwI0FvJCtcJmWqn/DJ-bot-UI?node-id=0-1&t=xhtsuYnkay9n5QWe-1 
+I was thinking of integrating a DJ deck interface and take advantage of the gesture identification that I created through this.
+
+## Gestures and their respective controls
+Mediapipe identifies different joints and points on a hand, I could then gather data points of where these points are located. These detected landmarks can be combined to create "gestures"
+- pointer finger
+- fist
+- index & pointer up
+- pinch
+
+This gesture labels are identified in gesture classifier tool made with C++ as decision making if faster with the C++ language. This information is sent to cpp interface then process to action_nodes python
+- pause/unpause track (fist identified for 2 seconds)
+- 2 fingers tounching track to spin it
+- pointer finger can play with different switches and adjust nodes
+- pinch method used to turn nodes 
+
+Bot identifications: 
+- 2 fingers up in the air for over 4 seconds ("fret flick", atomosphere changes)
 
 ## My Background 
 Specifically for this project, I think it's important to consider my multidisciplinary tech and music background. I love music, I enjoy manipulating art to create new art, on the side I play with my DJ control deck and launchpad to play with beats. DJing really evokes a 
@@ -27,3 +42,8 @@ I wanted a modular design, ROS2 based workflows work for bots so that many diffe
 
 ## Reflection/learning outcomes 
 - Implementing C++ was a design-decision choice to allow efficient decision making when it came to add more gestures. Since this is modular design, this makes it way faster when upgrading and doing further improvements/features
+
+## Referenced Resources 
+- https://blog.roboflow.com/what-is-mediapipe/ -> used to understand the mediapipe library
+- https://medium.com/analytics-vidhya/mediapipe-hand-gesture-based-volume-controller-in-python-w-o-gpu-67db1f30c6ed -> volume controlling inspo
+- https://chernando.com/blog/2023/07/23/hand-tracking-for-mouse-input.html -> hand-tracking for mouse input inpso/understanding
