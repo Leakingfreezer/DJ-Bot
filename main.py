@@ -16,6 +16,7 @@ import cv2
 from mediapipe_node import MediaPipeNode
 from action_node import DJActionNode
 from utils.cpp_interface import classify_gesture_from_cpp
+import ws_bridge
 
 
 # Initialize everything needed for the pipeline
@@ -23,6 +24,8 @@ def initialize_system():
     camera = cv2.VideoCapture(0)
     mediapipe_node = MediaPipeNode()
     action_node = DJActionNode()
+
+    ws_bridge.start()  # starts WebSocket server for dj_ui.html
 
     return camera, mediapipe_node, action_node
 
@@ -106,6 +109,19 @@ def run_pipeline():
 
         # Step 4: show output
         display_info(processed_frame, gesture, last_action, action_node, hand_data)
+
+        # Step 5: push state to React UI
+        ws_bridge.broadcast({
+            "gesture":             gesture,
+            "last_action":         last_action,
+            "hover_target":        action_node.hover_target,
+            "is_playing":          action_node.is_playing,
+            "volume":              action_node.volume,
+            "waveform_scale":      action_node.waveform_scale,
+            "turntable_position":  action_node.turntable_position,
+            "index_x":             hand_data.get("index_tip_x"),
+            "index_y":             hand_data.get("index_tip_y"),
+        })
 
         cv2.imshow("DJ Bot Pipeline", processed_frame)
 

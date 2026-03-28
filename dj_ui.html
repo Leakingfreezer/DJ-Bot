@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DJ Bot</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #09090f;
+      color: #e0e0e0;
+      font-family: system-ui, -apple-system, sans-serif;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      position: relative;
+    }
+
+    /* ── Top stage: buttons | center void | mixer ── */
+    .stage {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+      position: relative;
+    }
+
+    .center-void {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* ── Camera feed ── */
+    .camera-feed {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1); /* mirror to match OpenCV's flipped output */
+      opacity: 0;
+      transition: opacity 0.35s ease;
+      pointer-events: none;
+    }
+
+    .camera-feed.visible { opacity: 1; }
+
+    /* ── Toggle controls (top-right corner) ── */
+    .ui-toggles {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      z-index: 99;
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      background: rgba(12, 12, 24, 0.82);
+      border: 1px solid #252540;
+      border-radius: 20px;
+      padding: 5px 11px 5px 8px;
+      backdrop-filter: blur(8px);
+    }
+
+    .toggle-label {
+      font-size: 10px;
+      color: #777;
+      letter-spacing: 0.4px;
+      user-select: none;
+    }
+
+    .pill-switch {
+      width: 32px;
+      height: 17px;
+      border-radius: 9px;
+      background: #252540;
+      position: relative;
+      cursor: pointer;
+      border: none;
+      transition: background 0.2s;
+      flex-shrink: 0;
+      padding: 0;
+    }
+
+    .pill-switch.on { background: #5a3fa0; }
+
+    .pill-switch::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      background: #fff;
+      transition: left 0.18s ease;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+    }
+
+    .pill-switch.on::after { left: 17px; }
+
+    /* ── Deck buttons (left panel) ── */
+    .deck-buttons {
+      padding: 18px 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 7px;
+      z-index: 10;
+    }
+
+    .btn-row { display: flex; gap: 5px; }
+
+    .dj-btn {
+      padding: 9px 6px;
+      min-width: 54px;
+      background: #15152a;
+      border: 1px solid #252540;
+      border-radius: 5px;
+      color: #999;
+      font-size: 8.5px;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      text-align: center;
+      user-select: none;
+      transition: background 0.1s, border-color 0.1s, color 0.1s;
+    }
+
+    .dj-btn.hover {
+      border-color: #5a3fa0;
+      background: #1c1c38;
+      color: #ccc;
+    }
+
+    .dj-btn.lit {
+      background: #d4861c;
+      border-color: #e8a030;
+      color: #000;
+    }
+
+    /* ── Mixer panel (right) ── */
+    .mixer {
+      width: 72px;
+      padding: 16px 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+    }
+
+    .knob-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .knob {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 37% 37%, #2e2e52, #131328);
+      border: 1.5px solid #2e2e52;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.04);
+      position: relative;
+    }
+
+    .knob::after {
+      content: '';
+      position: absolute;
+      top: 7px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 2px;
+      height: 11px;
+      background: rgba(255,255,255,0.65);
+      border-radius: 1px;
+    }
+
+    .knob-label {
+      font-size: 7.5px;
+      letter-spacing: 1px;
+      color: #666;
+      text-transform: uppercase;
+    }
+
+    .fader-track {
+      width: 6px;
+      height: 90px;
+      background: #131328;
+      border: 1px solid #252540;
+      border-radius: 3px;
+      position: relative;
+      margin-top: 2px;
+    }
+
+    .fader-thumb {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 18px;
+      height: 8px;
+      background: linear-gradient(to bottom, #bbb, #888);
+      border-radius: 2px;
+      transition: top 0.12s ease;
+    }
+
+    /* ── Player bar ── */
+    .player {
+      height: 122px;
+      background: #0e0e1c;
+      border-top: 1px solid #1c1c38;
+      display: flex;
+      align-items: center;
+      padding: 0 22px;
+      gap: 22px;
+      flex-shrink: 0;
+    }
+
+    /* ── Vinyl / Turntable ── */
+    .vinyl-wrap {
+      position: relative;
+      width: 88px;
+      height: 88px;
+      flex-shrink: 0;
+    }
+
+    .vinyl-disc {
+      width: 88px;
+      height: 88px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle, transparent 13.5%, rgba(0,0,0,0.28) 14%, transparent 14.5%),
+        radial-gradient(circle, transparent 21%, rgba(0,0,0,0.18) 21.5%, transparent 22%),
+        radial-gradient(circle, transparent 29%, rgba(0,0,0,0.14) 29.5%, transparent 30%),
+        radial-gradient(circle, transparent 37%, rgba(0,0,0,0.1)  37.5%, transparent 38%),
+        conic-gradient(
+          #b8831f 0deg,   #d4a843 18deg,  #9e6e1a 36deg,
+          #c89030 54deg,  #b8831f 72deg,  #d4a843 90deg,
+          #9e6e1a 108deg, #c89030 126deg, #b8831f 144deg,
+          #d4a843 162deg, #9e6e1a 180deg, #c89030 198deg,
+          #b8831f 216deg, #d4a843 234deg, #9e6e1a 252deg,
+          #c89030 270deg, #b8831f 288deg, #d4a843 306deg,
+          #9e6e1a 324deg, #c89030 342deg, #b8831f 360deg
+        );
+      box-shadow:
+        inset 0 0 18px rgba(0,0,0,0.45),
+        0 0 14px rgba(0,0,0,0.6);
+    }
+
+    .vinyl-disc.spinning {
+      animation: vinylSpin 2.2s linear infinite;
+    }
+
+    @keyframes vinylSpin {
+      to { transform: rotate(360deg); }
+    }
+
+    .vinyl-center {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 40% 40%, #9070c0, #472880);
+      box-shadow: 0 0 10px rgba(100, 60, 180, 0.55);
+    }
+
+    /* ── Song info ── */
+    .song-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .song-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .song-artist { font-size: 12px; color: #777; margin-bottom: 2px; }
+    .song-album  { font-size: 11px; color: #555; margin-bottom: 9px; }
+
+    .song-actions { display: flex; gap: 14px; }
+
+    .icon-btn {
+      background: none;
+      border: none;
+      color: #555;
+      font-size: 16px;
+      cursor: default;
+      line-height: 1;
+      padding: 0;
+      transition: color 0.15s;
+    }
+
+    .icon-btn.liked { color: #e05050; }
+
+    /* ── Transport controls ── */
+    .transport {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      min-width: 190px;
+    }
+
+    .transport-btns {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .t-btn {
+      background: none;
+      border: none;
+      color: #888;
+      font-size: 16px;
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: default;
+    }
+
+    .t-btn.play-btn {
+      background: #5a3fa0;
+      color: #fff;
+      width: 42px;
+      height: 42px;
+      font-size: 14px;
+      box-shadow: 0 0 14px rgba(90, 63, 160, 0.4);
+      transition: background 0.12s;
+    }
+
+    .t-btn.play-btn.playing { background: #7050c0; }
+
+    /* ── Progress bar ── */
+    .progress-row {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .prog-label {
+      font-size: 8px;
+      color: #444;
+      white-space: nowrap;
+      min-width: 46px;
+    }
+
+    .prog-label:last-child { text-align: right; }
+
+    .progress-bar {
+      flex: 1;
+      height: 3px;
+      background: #222240;
+      border-radius: 2px;
+      position: relative;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(to right, #5a3fa0, #7c5cbf);
+      border-radius: 2px;
+      transition: width 0.4s linear;
+    }
+
+    .progress-dot {
+      position: absolute;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #7c5cbf;
+      transition: left 0.4s linear;
+    }
+
+    /* ── Debug overlay ── */
+    .debug {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      font-size: 11.5px;
+      line-height: 1.8;
+      color: #00e87a;
+      font-family: 'Courier New', monospace;
+      pointer-events: none;
+      z-index: 99;
+      text-shadow: 0 0 6px rgba(0, 232, 122, 0.25);
+    }
+
+    /* ── Finger position cursor ── */
+    .finger-cursor {
+      position: fixed;
+      pointer-events: none;
+      z-index: 90;
+      transform: translate(-50%, -50%);
+    }
+
+    .finger-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: rgba(124, 92, 191, 0.9);
+      box-shadow: 0 0 0 3px rgba(124, 92, 191, 0.25);
+      animation: fingerPulse 1.6s ease-in-out infinite;
+    }
+
+    @keyframes fingerPulse {
+      0%, 100% { box-shadow: 0 0 0 3px rgba(124, 92, 191, 0.25); }
+      50%       { box-shadow: 0 0 0 9px rgba(124, 92, 191, 0.08); }
+    }
+
+    /* ── Hitbox debug layer ── */
+    .hitbox-layer {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 80;
+    }
+
+    .hbox {
+      position: absolute;
+      border: 1px dashed rgba(124, 92, 191, 0.35);
+      border-radius: 3px;
+    }
+
+    .hbox.active {
+      border-color: rgba(124, 92, 191, 0.85);
+      background: rgba(124, 92, 191, 0.07);
+    }
+
+    .hbox-label {
+      font-size: 7px;
+      color: rgba(124, 92, 191, 0.6);
+      position: absolute;
+      top: 2px;
+      left: 3px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Zone config — normalized coords (0–1), mirrors zones in action_node.py
+    // To adjust hitboxes, change values here — nowhere else
+    // ─────────────────────────────────────────────────────────────────────
+    const ZONES = {
+      volume_slider: { x1: 0.05, x2: 0.15, y1: 0.20, y2: 0.85, label: "Volume" },
+      turntable:     { x1: 0.65, x2: 0.95, y1: 0.15, y2: 0.55, label: "Turntable" },
+      waveform:      { x1: 0.25, x2: 0.85, y1: 0.35, y2: 0.60, label: "Waveform" },
+      btn_load:      { x1: 0.02, x2: 0.12, y1: 0.46, y2: 0.56, label: "LOAD" },
+      btn_play:      { x1: 0.13, x2: 0.23, y1: 0.46, y2: 0.56, label: "PLAY" },
+      btn_hot_cue:   { x1: 0.24, x2: 0.34, y1: 0.46, y2: 0.56, label: "HOT CUE" },
+      btn_slip_loop: { x1: 0.02, x2: 0.12, y1: 0.57, y2: 0.67, label: "SLIP LOOP" },
+      btn_beat_loop: { x1: 0.13, x2: 0.23, y1: 0.57, y2: 0.67, label: "BEAT LOOP" },
+      btn_sync:      { x1: 0.24, x2: 0.34, y1: 0.57, y2: 0.67, label: "SYNC" },
+    };
+
+    // Returns the first zone that contains (x, y), or null
+    function hitZone(x, y) {
+      for (const [name, z] of Object.entries(ZONES)) {
+        if (x >= z.x1 && x <= z.x2 && y >= z.y1 && y <= z.y2) return name;
+      }
+      return null;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Vinyl — the spinning record
+    // ─────────────────────────────────────────────────────────────────────
+    function Vinyl({ spinning }) {
+      return (
+        <div className="vinyl-wrap">
+          <div className={`vinyl-disc${spinning ? ' spinning' : ''}`} />
+          <div className="vinyl-center" />
+        </div>
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Deck buttons — 6 pads, 2 rows of 3
+    // ─────────────────────────────────────────────────────────────────────
+    const PAD_DEFS = [
+      ['btn_load',      'Load'],
+      ['btn_play',      'Play'],
+      ['btn_hot_cue',   'Hot Cue'],
+      ['btn_slip_loop', 'Slip Loop'],
+      ['btn_beat_loop', 'Beat Loop'],
+      ['btn_sync',      'Sync'],
+    ];
+
+    function DeckButtons({ hoverZone, litSet }) {
+      const makeBtn = ([id, label]) => (
+        <div
+          key={id}
+          className={[
+            'dj-btn',
+            hoverZone === id ? 'hover' : '',
+            litSet.has(id)   ? 'lit'   : '',
+          ].filter(Boolean).join(' ')}
+        >
+          {label}
+        </div>
+      );
+
+      return (
+        <div className="deck-buttons">
+          <div className="btn-row">{PAD_DEFS.slice(0, 3).map(makeBtn)}</div>
+          <div className="btn-row">{PAD_DEFS.slice(3).map(makeBtn)}</div>
+        </div>
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Mixer — two knobs + a fader
+    // ─────────────────────────────────────────────────────────────────────
+    function Mixer({ volume }) {
+      const faderTop = Math.max(3, Math.min(80, (100 - volume) * 0.8));
+      return (
+        <div className="mixer">
+          <div className="knob-group">
+            <div className="knob" />
+            <span className="knob-label">Mixing</span>
+          </div>
+          <div className="knob-group">
+            <div className="knob" />
+            <span className="knob-label">Level</span>
+          </div>
+          <div className="fader-track">
+            <div className="fader-thumb" style={{ top: `${faderTop}%` }} />
+          </div>
+        </div>
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Player bar — vinyl + song info + transport + progress
+    // ─────────────────────────────────────────────────────────────────────
+    function Player({ playing, progress, onToggle }) {
+      return (
+        <div className="player">
+          <Vinyl spinning={playing} />
+
+          <div className="song-info">
+            <div className="song-title">Title of song</div>
+            <div className="song-artist">Artist</div>
+            <div className="song-album">Album</div>
+            <div className="song-actions">
+              <button className="icon-btn">♡</button>
+              <button className="icon-btn">≡</button>
+            </div>
+          </div>
+
+          <div className="transport">
+            <div className="transport-btns">
+              <button className="t-btn">⏮</button>
+              <button
+                className={`t-btn play-btn${playing ? ' playing' : ''}`}
+                onClick={onToggle}
+              >
+                {playing ? '⏸' : '▶'}
+              </button>
+              <button className="t-btn">⏭</button>
+            </div>
+
+            <div className="progress-row">
+              <span className="prog-label">Start of song</span>
+              <div className="progress-bar">
+                <div className="progress-fill" style={{ width: `${progress}%` }} />
+                <div className="progress-dot"  style={{ left:  `${progress}%` }} />
+              </div>
+              <span className="prog-label">End of song</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Finger cursor — shows where MediaPipe thinks your finger is
+    // ─────────────────────────────────────────────────────────────────────
+    function FingerCursor({ pos }) {
+      if (!pos) return null;
+      return (
+        <div
+          className="finger-cursor"
+          style={{ left: `${pos.x * 100}vw`, top: `${pos.y * 100}vh` }}
+        >
+          <div className="finger-dot" />
+        </div>
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Hitbox debug layer — press H to toggle
+    // ─────────────────────────────────────────────────────────────────────
+    function HitboxLayer({ activeZone }) {
+      return (
+        <div className="hitbox-layer">
+          {Object.entries(ZONES).map(([key, z]) => (
+            <div
+              key={key}
+              className={`hbox${activeZone === key ? ' active' : ''}`}
+              style={{
+                left:   `${z.x1 * 100}%`,
+                top:    `${z.y1 * 100}%`,
+                width:  `${(z.x2 - z.x1) * 100}%`,
+                height: `${(z.y2 - z.y1) * 100}%`,
+              }}
+            >
+              <span className="hbox-label">{z.label}</span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // App — state lives here, WebSocket connection lives here
+    // ─────────────────────────────────────────────────────────────────────
+    function App() {
+      const [playing,    setPlaying]   = useState(false);
+      const [volume,     setVolume]    = useState(50);
+      const [progress,   setProgress]  = useState(18);
+      const [hoverZone,  setHoverZone] = useState(null);
+      const [litSet,     setLitSet]    = useState(new Set());
+      const [gesture,    setGesture]   = useState('none');
+      const [action,     setAction]    = useState('No action');
+      const [fingerPos,  setFingerPos] = useState(null);
+      const [waveform,   setWaveform]  = useState(1.0);
+      const [turntable,  setTurntable] = useState(0.0);
+      const [showBoxes,  setShowBoxes] = useState(false);
+      const [cameraOn,   setCameraOn]  = useState(false);
+
+      const videoRef  = useRef(null);
+      const streamRef = useRef(null);
+
+      // Start / stop webcam when the toggle changes
+      useEffect(() => {
+        if (cameraOn) {
+          navigator.mediaDevices
+            .getUserMedia({ video: { facingMode: 'user', width: { ideal: 1280 } } })
+            .then(stream => {
+              streamRef.current = stream;
+              if (videoRef.current) videoRef.current.srcObject = stream;
+            })
+            .catch(err => {
+              console.warn('[camera] access denied or busy:', err.message);
+              setCameraOn(false);
+            });
+        } else {
+          streamRef.current?.getTracks().forEach(t => t.stop());
+          streamRef.current = null;
+          if (videoRef.current) videoRef.current.srcObject = null;
+        }
+      }, [cameraOn]);
+
+      // Advance progress while playing
+      useEffect(() => {
+        if (!playing) return;
+        const id = setInterval(() =>
+          setProgress(p => p >= 100 ? 0 : +(p + 0.04).toFixed(3))
+        , 50);
+        return () => clearInterval(id);
+      }, [playing]);
+
+      // WebSocket — ws_bridge.py must be running alongside main.py
+      // Run: python ws_bridge.py  (or it starts automatically via main.py)
+      useEffect(() => {
+        let ws, retryTimer;
+
+        function connect() {
+          try {
+            ws = new WebSocket('ws://localhost:8765');
+
+            ws.onmessage = ({ data }) => {
+              try {
+                const msg = JSON.parse(data);
+                if (msg.is_playing           != null) setPlaying(msg.is_playing);
+                if (msg.volume               != null) setVolume(msg.volume);
+                if (msg.gesture              != null) setGesture(msg.gesture);
+                if (msg.last_action          != null) setAction(msg.last_action);
+                if (msg.hover_target         != null) setHoverZone(msg.hover_target);
+                if (msg.waveform_scale       != null) setWaveform(msg.waveform_scale);
+                if (msg.turntable_position   != null) setTurntable(msg.turntable_position);
+                if (msg.index_x != null && msg.index_y != null) {
+                  const x = msg.index_x, y = msg.index_y;
+                  setFingerPos({ x, y });
+                  setHoverZone(hitZone(x, y));
+                }
+              } catch { /* bad frame, skip */ }
+            };
+
+            ws.onerror = ws.onclose = () => {
+              retryTimer = setTimeout(connect, 2000);
+            };
+          } catch {
+            retryTimer = setTimeout(connect, 2000);
+          }
+        }
+
+        connect();
+        return () => { ws?.close(); clearTimeout(retryTimer); };
+      }, []);
+
+      // Keyboard shortcuts for testing without the pipeline
+      useEffect(() => {
+        const onKey = (e) => {
+          if (e.key === 'h') setShowBoxes(v => !v);
+          if (e.key === 'c') setCameraOn(v => !v);
+          if (e.key === ' ') { e.preventDefault(); setPlaying(v => !v); }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+      }, []);
+
+      return (
+        <div id="app">
+          {/* Green debug readout — matches what OpenCV shows on the camera feed */}
+          <div className="debug">
+            <div>Gesture: {gesture}</div>
+            <div>Action: {action}</div>
+            <div>Hover: {hoverZone ?? 'None'}</div>
+            <div>Volume: {volume}</div>
+            <div>Waveform: {waveform.toFixed(2)}</div>
+            <div>Turntable: {turntable.toFixed(2)}</div>
+            {fingerPos && (
+              <div>Index: ({fingerPos.x.toFixed(2)}, {fingerPos.y.toFixed(2)})</div>
+            )}
+          </div>
+
+          {/* Toggle switches — top right */}
+          <div className="ui-toggles">
+            <div className="toggle-row">
+              <span className="toggle-label">Camera</span>
+              <button
+                className={`pill-switch${cameraOn ? ' on' : ''}`}
+                onClick={() => setCameraOn(v => !v)}
+                title="Toggle webcam (C)"
+              />
+            </div>
+            <div className="toggle-row">
+              <span className="toggle-label">Hitboxes</span>
+              <button
+                className={`pill-switch${showBoxes ? ' on' : ''}`}
+                onClick={() => setShowBoxes(v => !v)}
+                title="Toggle hitbox overlay (H)"
+              />
+            </div>
+          </div>
+
+          {showBoxes && <HitboxLayer activeZone={hoverZone} />}
+          <FingerCursor pos={fingerPos} />
+
+          <div className="stage">
+            <DeckButtons hoverZone={hoverZone} litSet={litSet} />
+            <div className="center-void">
+              <video
+                ref={videoRef}
+                className={`camera-feed${cameraOn ? ' visible' : ''}`}
+                autoPlay
+                muted
+                playsInline
+              />
+            </div>
+            <Mixer volume={volume} />
+          </div>
+
+          <Player
+            playing={playing}
+            progress={progress}
+            onToggle={() => setPlaying(v => !v)}
+          />
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
